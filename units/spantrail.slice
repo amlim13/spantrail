@@ -1,0 +1,13 @@
+[Unit]
+Description=SpanTrail slice - agent observability workload
+Documentation=https://github.com/spantrail/spantrail
+Before=spantrail-db.service spantrail-api.service
+Requires=spantrail-db.service
+
+[Slice]
+MemoryAccounting=yes
+CPUAccounting=yes
+MemoryMax=2G
+CPUQuota=40%
+TasksMax=512
+IOWeight=50

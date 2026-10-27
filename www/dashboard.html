@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SpanTrail Dashboard</title>
+<style>
+  :root{--bg:#0a0b0e;--panel:#121419;--line:#22252d;--fg:#e8eaf0;--dim:#8b93a7;
+    --acc:#5eead4;--acc2:#818cf8;--err:#f87171;--ok:#4ade80}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+  code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  header{border-bottom:1px solid var(--line);background:rgba(10,11,14,.9);position:sticky;top:0;
+    backdrop-filter:blur(8px);z-index:10}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  nav{display:flex;align-items:center;gap:20px;height:60px}
+  .logo{font-weight:700;letter-spacing:-.4px;font-size:19px;display:flex;align-items:center;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--acc);box-shadow:0 0 12px var(--acc)}
+  .sp{flex:1}
+  .tab{font-size:14px;color:var(--dim);cursor:pointer;padding:6px 2px;border-bottom:2px solid transparent}
+  .tab:hover{color:var(--fg)}
+  .tab.on{color:var(--fg);border-color:var(--acc)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:20px}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:20px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .kpi .l{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  .kpi .v{font-size:26px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+  .kpi .s{font-size:12.5px;color:var(--dim);margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr.click{cursor:pointer}tr.click:hover td{background:#171a21}
+  .pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;background:#1c1f28;
+    border:1px solid var(--line);color:var(--dim)}
+  .pill.ok{color:var(--ok);border-color:#1e3a2a;background:#0f1f18}
+  .pill.err{color:var(--err);border-color:#3a1e1e;background:#1f0f0f}
+  .btn{display:inline-block;padding:8px 16px;border-radius:8px;font-size:14px;font-weight:600;
+    border:1px solid var(--line);background:#1c1f28;color:var(--fg);cursor:pointer}
+  .btn.p{background:var(--acc);color:#06231f;border-color:var(--acc)}
+  input{background:#0d0f13;border:1px solid var(--line);color:var(--fg);padding:9px 12px;border-radius:8px;
+    font-size:14px;width:100%}
+  input:focus{outline:none;border-color:var(--acc2)}
+  label{display:block;font-size:13px;color:var(--dim);margin:14px 0 6px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  pre{background:#0d0f13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:12.5px;
+    overflow-x:auto;margin:8px 0 0;line-height:1.5}
+  .hide{display:none}
+  .err{color:var(--err);font-size:13.5px;margin-top:10px}
+  .ok2{color:var(--ok);font-size:13.5px;margin-top:10px}
+  .key{background:#0d0f13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;
+    font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;margin-top:8px}
+  .muted{color:var(--dim)}
+  .bar{height:6px;border-radius:3px;background:#1c1f28;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:var(--acc)}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <nav>
+    <span class="logo"><span class="dot"></span>SpanTrail</span>
+    <span class="tab on" data-t="traces">Traces</span>
+    <span class="tab" data-t="spans">Spans</span>
+    <span class="tab" data-t="usage">Usage</span>
+    <span class="sp"></span>
+    <span class="tab" data-t="signup">API key</span>
+  </nav>
+</div></header>
+
+<div class="wrap">
+  <div id="login" class="panel">
+    <h3 style="margin-top:0">Enter your API key</h3>
+    <p class="muted" style="font-size:14px;margin:0 0 6px">Paste the <code>spantrail_sk_...</code> key you were issued.</p>
+    <div class="row">
+      <div><input id="keyin" type="password" placeholder="spantrail_sk_..." autocomplete="off"></div>
+      <div><button class="btn p" style="width:100%" onclick="login()">Open dashboard</button></div>
+    </div>
+    <div id="loginerr" class="err hide"></div>
+  </div>
+
+  <div id="app" class="hide">
+    <div class="kpis">
+      <div class="kpi"><div class="l">Spans 24h</div><div class="v" id="k1">-</div><div class="s" id="k1s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Errors 24h</div><div class="v" id="k2">-</div><div class="s" id="k2s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">p95 latency</div><div class="v" id="k3">-</div><div class="s" id="k3s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Cost 24h</div><div class="v" id="k4">-</div><div class="s" id="k4s">&nbsp;</div></div>
+      <div class="kpi"><div class="l">Cost 30d</div><div class="v" id="k5">-</div><div class="s" id="k5s">&nbsp;</div></div>
+    </div>
+
+    <div id="t-traces" class="panel">
+      <h3 style="margin-top:0">Traces</h3>
+      <table><thead><tr><th>Name</th><th>Spans</th><th>Errors</th><th>Duration</th>
+        <th>Tokens</th><th>Cost</th><th>Started</th></tr></thead><tbody id="traces"></tbody></table>
+    </div>
+
+    <div id="t-spans" class="panel hide">
+      <h3 style="margin-top:0">Recent spans</h3>
+      <table><thead><tr><th>Name</th><th>Kind</th><th>Duration</th><th>Model</th>
+        <th>Tokens</th><th>Error</th><th>Started</th></tr></thead><tbody id="spans"></tbody></table>
+    </div>
+
+    <div id="t-usage" class="panel hide">
+      <h3 style="margin-top:0">Usage</h3>
+      <div id="usage"></div>
+    </div>
+
+    <div id="t-signup" class="panel hide">
+      <h3 style="margin-top:0">Get an API key</h3>
+      <p class="muted" style="font-size:14px;margin:0">Creates a tenant and shows the key once.</p>
+      <div class="row">
+        <div><label>Name</label><input id="sname" placeholder="Acme Inc"></div>
+        <div><label>Email</label><input id="semail" placeholder="dev@acme.com" type="email"></div>
+      </div>
+      <button class="btn p" style="margin-top:16px" onclick="signup()">Create tenant</button>
+      <div id="signerr" class="err hide"></div>
+      <div id="signok" class="ok2 hide">
+        <div style="margin-top:10px">Your API key (shown once):</div>
+        <div class="key" id="signkey"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let KEY = localStorage.getItem("spantrail_key") || "";
+const $ = id => document.getElementById(id);
+
+function show(t){
+  ["traces","spans","usage","signup"].forEach(x=>
+    $("t-"+x).classList.toggle("hide", x!==t));
+  document.querySelectorAll(".tab").forEach(el=>
+    el.classList.toggle("on", el.dataset.t===t));
+}
+document.querySelectorAll(".tab").forEach(el=>
+  el.onclick = ()=>{ if(el.dataset.t!=="signup" && !KEY) return show("traces"); show(el.dataset.t); });
+
+async function api(path, opts={}){
+  const r = await fetch(path, {...opts, headers:{
+    "Content-Type":"application/json","X-API-Key":KEY, ...(opts.headers||{})}});
+  const t = await r.text();
+  let j; try{ j = JSON.parse(t); }catch(e){ j = {detail:t}; }
+  if(!r.ok) throw new Error(j.detail || ("HTTP "+r.status));
+  return j;
+}
+
+async function login(){
+  const k = $("keyin").value.trim() || KEY;
+  if(!k) return;
+  KEY = k;
+  try{
+    await api("/api/v1/stats");
+    localStorage.setItem("spantrail_key", KEY);
+    $("login").classList.add("hide");
+    $("app").classList.remove("hide");
+    await refresh();
+  }catch(e){ $("loginerr").textContent = e.message; $("loginerr").classList.remove("hide"); }
+}
+
+function fmt(n){ return n===null||n===undefined ? "-" : Number(n).toLocaleString(); }
+function dur(ms){ if(ms===null||ms===undefined) return "-"; return ms<1000 ? Math.round(ms)+" ms" : (ms/1000).toFixed(2)+" s"; }
+function money(v){ return "$" + Number(v||0).toFixed(4).replace(/0+$/,"").replace(/\.$/,""); }
+function when(s){ return s ? new Date(s).toLocaleString() : "-"; }
+
+async function refresh(){
+  try{
+    const s = await api("/api/v1/stats");
+    $("k1").textContent = fmt(s.spans_24h);
+    $("k1s").textContent = fmt(s.spans_7d)+" last 7d";
+    $("k2").textContent = fmt(s.errors_24h);
+    $("k2s").textContent = s.spans_24h ? (100*s.errors_24h/s.spans_24h).toFixed(1)+"% of spans" : "-";
+    $("k3").textContent = dur(s.p95_ms);
+    $("k3s").textContent = "p50 "+dur(s.p50_ms)+" / p99 "+dur(s.p99_ms);
+    $("k4").textContent = money(s.cost_24h);
+    $("k4s").textContent = fmt(s.tokens_in_24h+s.tokens_out_24h)+" tokens 24h";
+    $("k5").textContent = money(s.cost_30d);
+    $("k5s").textContent = fmt(s.tokens_30d)+" tokens 30d";
+
+    const tr = await api("/api/v1/traces?limit=50");
+    $("traces").innerHTML = tr.traces.map(t=>`
+      <tr class="click" onclick="openTrace('${t.id}')">
+        <td>${t.name||"(unnamed)"}</td>
+        <td class="num">${fmt(t.span_count)}</td>
+        <td class="num">${t.error_count?`<span class="pill err">${t.error_count}</span>`:"0"}</td>
+        <td class="num">${t.ended_at?dur(new Date(t.ended_at)-new Date(t.started_at)):"-"}</td>
+        <td class="num">${fmt(Number(t.tokens_in||0)+Number(t.tokens_out||0))}</td>
+        <td class="num">${money(t.cost_usd)}</td>
+        <td class="muted">${when(t.started_at)}</td></tr>`).join("") ||
+      `<tr><td colspan="7" class="muted">No traces yet. Send one with the SDK.</td></tr>`;
+
+    const sp = await api("/api/v1/spans?limit=60");
+    $("spans").innerHTML = sp.spans.map(x=>`
+      <tr><td>${x.name}</td><td><span class="pill">${x.kind}</span></td>
+        <td class="num">${dur(x.duration_ms)}</td><td class="muted">${x.model||"-"}</td>
+        <td class="num">${fmt(Number(x.tokens_input||0)+Number(x.tokens_output||0))}</td>
+        <td>${x.error?`<span class="pill err">${String(x.error).slice(0,48)}</span>`:"-"}</td>
+        <td class="muted">${when(x.started_at)}</td></tr>`).join("") ||
+      `<tr><td colspan="7" class="muted">No spans yet.</td></tr>`;
+
+    const u = await api("/api/v1/usage");
+    const pct = u.events_limit ? Math.min(100, 100*u.events_used/u.events_limit) : 0;
+    $("usage").innerHTML = `
+      <p class="muted" style="font-size:14px;margin:0">Plan <b style="color:var(--fg)">${u.plan}</b>
+        &middot; ${fmt(u.events_used)} of ${fmt(u.events_limit)} events this month
+        &middot; ${u.retention_days}-day retention</p>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <p class="muted" style="font-size:14px;margin:14px 0 0">Cost this month:
+        <b style="color:var(--fg)">${money(u.cost_usd_month)}</b></p>`;
+  }catch(e){
+    $("loginerr").textContent = e.message;
+    $("loginerr").classList.remove("hide");
+  }
+}
+
+async function openTrace(id){
+  try{
+    const t = await api("/api/v1/traces/"+id);
+    // Build a real tree: parent_id -> children, then flatten in DFS order.
+    const byParent = {};
+    t.spans.forEach(s => {
+      const k = s.parent_id || "__root__";
+      (byParent[k] = byParent[k] || []).push(s);
+    });
+    const flat = [];
+    (function walk(pid, d){
+      (byParent[pid] || []).forEach(s => { s.__d = d; flat.push(s); walk(s.id, d+1); });
+    })("__root__", 0);
+    // Any span whose parent is not in this trace still needs to show up.
+    const seen = new Set(flat.map(s => s.id));
+    t.spans.filter(s => !seen.has(s.id)).forEach(s => { s.__d = 0; flat.push(s); });
+
+    const rows = flat.map(s=>`
+      <tr><td style="padding-left:${14+18*s.__d}px"><span style="color:${s.__d?'var(--dim)':'var(--fg)'}">${s.__d?'└ ':''}${s.name}</span></td>
+        <td><span class="pill">${s.kind}</span></td>
+        <td class="num">${dur(s.duration_ms)}</td><td class="muted">${s.model||"-"}</td>
+        <td class="num">${fmt(Number(s.tokens_input||0)+Number(s.tokens_output||0))}</td>
+        <td>${s.error?`<span class="pill err">${String(s.error).slice(0,60)}</span>`:"-"}</td>
+        <td class="num">${money(s.cost_usd)}</td></tr>`).join("");
+    $("traces").innerHTML = `<tr><td colspan="7"><b>${t.trace.name}</b> <span class="muted">${t.trace.id}</span>
+      &nbsp;<button class="btn" onclick="refresh()">back</button></td></tr>` + rows;
+  }catch(e){ alert(e.message); }
+}
+
+async function signup(){
+  const name = $("sname").value.trim();
+  if(!name) return;
+  $("signerr").classList.add("hide");
+  try{
+    const r = await fetch("/api/v1/admin/tenants", {
+      method:"POST", headers:{"Content-Type":"application/json",
+        "X-Admin-Token": localStorage.getItem("spantrail_admin")||""},
+      body: JSON.stringify({name, email:$("semail").value.trim()||null})});
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail||("HTTP "+r.status));
+    $("signkey").textContent = j.api_key;
+    $("signok").classList.remove("hide");
+    KEY = j.api_key; localStorage.setItem("spantrail_key", KEY);
+    $("login").classList.add("hide"); $("app").classList.remove("hide");
+    await refresh();
+  }catch(e){ $("signerr").textContent = e.message; $("signerr").classList.remove("hide"); }
+}
+
+if(KEY){ $("keyin").value = KEY; login(); }
+</script>
+</body>
+</html>

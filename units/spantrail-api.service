@@ -1,0 +1,39 @@
+[Unit]
+Description=SpanTrail API - agent observability ingest and dashboard API
+After=network.target spantrail-db.service
+Requires=spantrail-db.service
+# Do not start the web edge before the API can accept connections.
+BindsTo=spantrail-db.service
+After=spantrail-db.service
+
+[Service]
+Type=simple
+User=spantrail
+Group=spantrail
+Slice=spantrail.slice
+EnvironmentFile=/opt/spantrail/app/.env
+WorkingDirectory=/opt/spantrail/app
+ExecStart=/opt/spantrail/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8080 --workers 2 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# Hard resource caps - if the API leaks memory it dies here, never in the bot units.
+MemoryHigh=1.6G
+MemoryMax=2G
+MemorySwapMax=0
+CPUQuota=40%
+TasksMax=400
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/spantrail/app /opt/spantrail/www
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

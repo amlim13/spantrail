@@ -1,0 +1,20 @@
+[Unit]
+Description=SpanTrail retention purge (30 day)
+After=spantrail-db.service
+Requires=spantrail-db.service
+
+[Service]
+Type=oneshot
+User=spantrail
+Group=spantrail
+Slice=spantrail.slice
+EnvironmentFile=/opt/spantrail/app/.env
+WorkingDirectory=/opt/spantrail/app
+ExecStart=/opt/spantrail/venv/bin/python /opt/spantrail/app/retention.py
+MemoryMax=256M
+CPUQuota=15%
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/spantrail/app
+PrivateTmp=yes

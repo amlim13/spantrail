@@ -1,0 +1,52 @@
+{
+	admin off
+	# Do not auto-create an HTTP->HTTPS redirect server on :80. The spantrail user is
+	# not root and must not bind privileged ports. We serve HTTPS on :8443 only.
+	auto_https disable_redirects
+}
+
+:8443 {
+	tls /opt/spantrail/caddy/tls/spantrail.crt /opt/spantrail/caddy/tls/spantrail.key
+	encode zstd gzip
+
+	# Serve the pinned cert so SDK clients can verify instead of skipping TLS.
+	handle /ca.crt {
+		root * /opt/spantrail/caddy
+		rewrite * /tls/spantrail.crt
+		file_server
+	}
+
+	handle /health {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	handle /dashboard {
+		root * /opt/spantrail/www
+		rewrite * /dashboard.html
+		file_server
+	}
+
+	handle /dashboard/* {
+		root * /opt/spantrail/www
+		rewrite * /dashboard.html
+		file_server
+	}
+
+	# Downloadable SDK wheel.
+	handle /dist/* {
+		root * /opt/spantrail
+		rewrite * /{uri}
+		header Content-Type application/octet-stream
+		file_server
+	}
+
+	handle {
+		root * /opt/spantrail/www
+		try_files {path} /index.html
+		file_server
+	}
+}

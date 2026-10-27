@@ -1,0 +1,38 @@
+[Unit]
+Description=SpanTrail web edge - Caddy TLS + static site
+After=network.target spantrail-api.service
+Requires=spantrail-api.service
+
+[Service]
+Type=notify
+User=spantrail
+Group=spantrail
+Slice=spantrail.slice
+WorkingDirectory=/opt/spantrail
+Environment=XDG_DATA_HOME=/opt/spantrail/caddy/data
+Environment=XDG_CONFIG_HOME=/opt/spantrail/caddy/config
+ExecStart=/usr/bin/caddy run --config /opt/spantrail/caddy/Caddyfile --adapter caddyfile
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+
+# CAP_NET_BIND_SERVICE lets the unprivileged spantrail user bind :80 and :443.
+# Required for ACME (Let's Encrypt http-01) and for serving the real domain.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+MemoryHigh=96M
+MemoryMax=128M
+MemorySwapMax=0
+CPUQuota=10%
+TasksMax=64
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/spantrail/caddy /opt/spantrail/www
+PrivateTmp=yes
+RestrictSUIDSGID=yes
+
+[Install]
+WantedBy=multi-user.target
