@@ -9,13 +9,18 @@ SSH="ssh -i ~/.ssh/gspotohetzner -o BatchMode=yes root@178.105.143.122"
 DOMAIN="spantrail.com"
 
 echo "=== 0. preflight: does DNS point here yet? ==="
-IPS=$($SSH "dig +short $DOMAIN @1.1.1.1" 2>/dev/null || true)
+# The VPS has neither dig nor nslookup; use getent (glibc resolver) instead.
+IPS=$($SSH "getent hosts $DOMAIN | awk '{print \$1}' | head -1" 2>/dev/null || true)
 echo "  $DOMAIN -> ${IPS:-<none>}"
 if ! echo "$IPS" | grep -q "178.105.143.122"; then
   echo "  ABORT: $DOMAIN does not resolve to 178.105.143.122 yet."
   echo "  Add the A record in Cloudflare, then re-run this script."
   exit 1
 fi
+
+echo
+echo "=== 0b. is anything already on :80 or :443? ==="
+$SSH 'ss -tlnp | grep -E ":(80|443)\s" && echo "  WARNING: something already binds these ports" || echo "  free"'
 
 echo
 echo "=== 1. install the ACME Caddyfile ==="
@@ -78,7 +83,9 @@ echo
 echo "=== 3. restart caddy -> ACME issuance ==="
 $SSH 'systemctl restart spantrail-web.service
 sleep 8
-journalctl -u spantrail-web -n 40 --no-pager | grep -iE "certificate|acme|obtain|error|challenge" | tail -20'
+journalctl -u spantrail-web -n 40 --no-pager | grep -iE "certificate|acme|obtain|error|challenge|loading|listening" | tail -20
+echo "--- listeners ---"
+ss -tlnp | grep -E ":(80|443)\s" | sed "s/^/  /"'
 
 echo
 echo "=== 4. verify the certificate ==="
