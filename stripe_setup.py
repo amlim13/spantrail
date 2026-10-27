@@ -92,16 +92,11 @@ def client_for(key):
 
 def check_account(client):
     hr("1. Verify the key")
-    # With a secret key the account is implicit, but accounts.retrieve()
-    # still requires an id. Retrieve the account the key belongs to.
+    # retrieve_current() maps to GET /v1/account - the account the key belongs
+    # to. accounts.list() lists CONNECTED accounts, which is empty for a
+    # normal account, and accounts.retrieve() needs an id we do not have.
     try:
-        accounts = client.v1.accounts.list({"limit": 1})
-        alist = accounts.to_dict() if hasattr(accounts, "to_dict") else dict(accounts)
-        rows = alist.get("data") or []
-        if not rows:
-            die("the key authenticated but no account was returned")
-        acct_id = rows[0]["id"]
-        acct = client.v1.accounts.retrieve(acct_id)
+        acct = client.v1.accounts.retrieve_current()
     except Exception as e:
         die(f"the key was rejected by Stripe: {e}")
     data = acct.to_dict() if hasattr(acct, "to_dict") else dict(acct)
@@ -110,6 +105,8 @@ def check_account(client):
     info(f"business name  : {data.get('business_name') or data.get('settings', {}).get('dashboard', {}).get('display_name') or '(not set)'}")
     info(f"country        : {data.get('country')}")
     info(f"default currency: {data.get('default_currency')}")
+    info(f"charges enabled : {data.get('charges_enabled')}")
+    info(f"payouts enabled: {data.get('payouts_enabled')}")
     info(f"MODE           : {'LIVE' if livemode else 'TEST'}")
     if livemode:
         print("\n  *** This is a LIVE key. Live-mode objects and real charges. ***")
@@ -232,8 +229,9 @@ def _create_webhook(client):
     return ep["id"], secret
 
 
-def write_env(values):
-    hr("4. Write the .env")
+def write_env(values, quiet=False):
+    if not quiet:
+        hr("4. Write the .env")
     if not os.path.exists(ENV_FILE):
         die(f"{ENV_FILE} does not exist")
     with open(ENV_FILE, "r", encoding="utf-8") as f:
@@ -277,8 +275,18 @@ def main():
     client = client_for(key)
     livemode = check_account(client)
 
-    hr("2. Products and prices")
+    # Persist the secret key IMMEDIATELY. If a later step fails (a bad price,
+    # an unreachable webhook URL), the key is already saved and the user
+    # does not have to paste it again.
     env = {"STRIPE_SECRET_KEY": key}
+    try:
+        write_env(env, quiet=True)
+    except SystemExit:
+        raise
+    except Exception as e:
+        info(f"could not write the .env yet: {e}")
+
+    hr("2. Products and prices")
     for plan, name, desc, amount, lookup in PLANS:
         price_id, _prod_id = ensure_price(client, plan, name, desc, amount, lookup)
         env["STRIPE_PRICE_PRO" if plan == "pro" else "STRIPE_PRICE_TEAM"] = price_id

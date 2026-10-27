@@ -50,16 +50,19 @@ echo "Running the setup on the VPS..."
 printf '%s' "$SECRET" | ssh -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
   "cat > /tmp/.stkey && chmod 600 /tmp/.stkey && \
    /opt/spantrail/venv/bin/python - <<'PYEOF'
-import getpass, sys, runpy
+import getpass, sys, runpy, os
 # Read the key from the file we just piped in, and feed it to getpass.
 with open('/tmp/.stkey') as f:
     key = f.read().strip()
 import getpass as _g
 _g.getpass = lambda prompt='Stripe secret key: ', stream=None: key
-import os
-os.environ['_ST_KEY'] = key
 sys.argv = ['stripe_setup.py'] + sys.argv[1:]
-runpy.run_path('/opt/spantrail/app/stripe_setup.py', run_name='__main__')
+try:
+    runpy.run_path('/opt/spantrail/app/stripe_setup.py', run_name='__main__')
+except SystemExit as e:
+    # Preserve the exit code but ALWAYS clean up the key file.
+    code = e.code if isinstance(e.code, int) else 0
+    sys.exit(code)
 PYEOF
   status=\$?; rm -f /tmp/.stkey; exit \$status" $EXTRA
 
