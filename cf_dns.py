@@ -188,14 +188,31 @@ def apply(token, zone_id, changes):
 def public_verify():
     print("\n=== PUBLIC DNS CHECK ===")
     import subprocess
+    import re
     for name, rtype in [(ZONE_NAME, "A"), ("www." + ZONE_NAME, "A"),
                          (ZONE_NAME, "NS")]:
-        out = subprocess.run(
-            ["nslookup", "-type=%s" % rtype, name, "1.1.1.1"],
-            capture_output=True, text=True, timeout=20)
-        lines = [l.strip() for l in (out.stdout or "").splitlines()
-                 if "Address:" in l and "1.1.1.1" not in l and "#" not in l]
-        got = lines[-1].replace("Address:", "").strip() if lines else "(none)"
+        got = "(none)"
+        try:
+            out = subprocess.run(
+                ["nslookup", "-type=%s" % rtype, name, "1.1.1.1"],
+                capture_output=True, text=True, timeout=20)
+            text = (out.stdout or "") + (out.stderr or "")
+            if "can't find" in text.lower() or "NONEXISTENT" in text:
+                got = "(NXDOMAIN - not delegated)"
+            elif rtype == "NS":
+                # NS answers are hostnames, not IPs.
+                names = re.findall(r"([A-Za-z0-9.-]+\.ns[A-Za-z0-9.-]*\.[A-Za-z]{2,})", text)
+                if not names:
+                    names = re.findall(r"(ns\d*\.[A-Za-z0-9.-]+\.[A-Za-z]{2,})", text)
+                got = ", ".join(dict.fromkeys(names)) if names else "(none)"
+            else:
+                ips = re.findall(r"\b(?:\d{1,3}\.){3}\d{1,3}\b", text)
+                ips = [ip for ip in ips
+                       if ip != "1.1.1.1" and not ip.startswith("127.")]
+                if ips:
+                    got = ", ".join(dict.fromkeys(ips))
+        except Exception as e:
+            got = "(lookup failed: %s)" % e
         print("  %-24s %-4s -> %s" % (name, rtype, got))
 
 
