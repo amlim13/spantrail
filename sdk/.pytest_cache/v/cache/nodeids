@@ -1,0 +1,11 @@
+[
+  "tests/test_sdk.py::test_disabled_sdk_is_a_noop",
+  "tests/test_sdk.py::test_failed_flush_is_retried_a_bounded_number_of_times",
+  "tests/test_sdk.py::test_flush_merges_multiple_payloads_into_one_object",
+  "tests/test_sdk.py::test_init_sets_config",
+  "tests/test_sdk.py::test_log_attaches_to_the_active_trace",
+  "tests/test_sdk.py::test_nested_spans_share_the_trace_and_form_a_tree",
+  "tests/test_sdk.py::test_span_records_cost_and_tokens",
+  "tests/test_sdk.py::test_trace_creates_one_trace_and_one_span",
+  "tests/test_sdk.py::test_trace_propagates_exception_and_records_error"
+]
