@@ -1,8 +1,0 @@
-README.md
-pyproject.toml
-spantrail/__init__.py
-spantrail.egg-info/PKG-INFO
-spantrail.egg-info/SOURCES.txt
-spantrail.egg-info/dependency_links.txt
-spantrail.egg-info/top_level.txt
-tests/test_sdk.py
