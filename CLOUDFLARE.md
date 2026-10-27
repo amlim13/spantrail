@@ -26,8 +26,8 @@ be limited to one zone with one permission.
 
 ## 2. Give it to me without putting it in the chat
 
-Don't paste the token into this conversation. Instead, put it in a file on
-your machine and I'll read it from there:
+Don't paste the token into this conversation. Put it in a file on your
+machine and I'll read it from there:
 
 ```bash
 mkdir -p ~/.config/spantrail
@@ -94,8 +94,6 @@ token does not undo DNS changes; deleting the records does.
 
 ## Token scope reference
 
-For reference, here is what the token can and cannot do:
-
 | Action | Allowed? |
 |---|---|
 | Read DNS records on spantrail.com | Yes |
@@ -105,3 +103,13 @@ For reference, here is what the token can and cannot do:
 | Read account/billing/settings | No |
 | Deploy workers, pages, or routes | No |
 | Manage API tokens | No |
+
+## Already verified
+
+| Check | Result |
+|---|---|
+| Cloudflare API reachable from this machine | Yes (HTTP 400 without auth, as expected) |
+| The request path works | Yes - an invalid token returns Cloudflare's own error `Invalid request headers (code 6003)` |
+| The token never appears in the output | Verified with a canary token |
+| The public DNS check parses correctly | Yes - A -> none, www -> NXDOMAIN, NS -> aitana/gerardo.ns.cloudflare.com |
+| `cf_dns.py` fails cleanly with no token | Yes, with instructions |
