@@ -25,3 +25,7 @@ CREDENTIALS.md
 .DS_Store
 Thumbs.db
 *.swp
+
+# Cloudflare API token - never commit
+cf_token
+*.cf_token
