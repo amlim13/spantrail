@@ -8,13 +8,13 @@ version = "0.1.0"
 description = "Lightweight tracing and observability for AI agents."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "SpanTrail" }]
 keywords = ["observability", "tracing", "agents", "llm", "opentelemetry", "cost"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -29,8 +29,8 @@ dependencies = []
 [project.urls]
 Homepage = "https://spantrail.com"
 Documentation = "https://spantrail.com/dashboard"
-Source = "https://github.com/spantrail/spantrail"
-Issues = "https://github.com/spantrail/spantrail/issues"
+Source = "https://github.com/amlim13/spantrail"
+Issues = "https://github.com/amlim13/spantrail/issues"
 
 [tool.setuptools]
 packages = ["spantrail"]
