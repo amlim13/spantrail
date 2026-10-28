@@ -6,6 +6,67 @@ on:
   pull_request:
 
 jobs:
+  secret-scan:
+    # Gate: the public repo must never contain a credential. This scans every
+    # blob in the history, not just the working tree.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan every blob in the history for secrets
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import re, subprocess, sys
+
+          PATTERNS = {
+              "SpanTrail API key":  r"(?:obsv|spantrail)_sk_[A-Za-z0-9]{8,}",
+              "Stripe secret key":  r"sk_(?:live|test)_[A-Za-z0-9]{16,}",
+              "Stripe webhook sec": r"whsec_[A-Za-z0-9]{8,}",
+              "Cloudflare token":   r"cfut_[A-Za-z0-9_-]{8,}",
+              "AWS access key":     r"AKIA[0-9A-Z]{16}",
+              "Private key":        r"BEGIN [A-Z ]*PRIVATE KEY",
+              "GitHub token":       r"gh[pousr]_[A-Za-z0-9]{20,}",
+              "Postgres password":  r"postgresql://[^\s:@]+:([^@\s]{6,})@",
+          }
+          # The install script writes a placeholder password; allow exactly it.
+          ALLOW = {"***"}
+
+          proc = subprocess.Popen(
+              ["git", "cat-file", "--batch-all-objects", "--batch"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+          hits = {}
+          while True:
+              header = proc.stdout.readline()
+              if not header:
+                  break
+              parts = header.decode("utf-8", "replace").split()
+              if len(parts) < 3:
+                  continue
+              sha, otype, size = parts[0], parts[1], int(parts[2])
+              data = proc.stdout.read(size)
+              proc.stdout.read(1)
+              if otype != "blob" or b"\x00" in data[:8000]:
+                  continue
+              text = data.decode("utf-8", "replace")
+              for label, pat in PATTERNS.items():
+                  for m in re.findall(pat, text):
+                      if m in ALLOW:
+                          continue
+                      hits.setdefault(label, set()).add(m)
+          proc.stdout.close(); proc.wait()
+
+          if hits:
+              print("SECRETS FOUND IN HISTORY:")
+              for label, vals in sorted(hits.items()):
+                  for v in sorted(vals):
+                      masked = v[:8] + "..." + v[-3:] if len(v) > 14 else "***"
+                      print("  %-20s %s" % (label, masked))
+              sys.exit(1)
+          print("No secrets found in the history.")
+          PYEOF
+
   sdk:
     runs-on: ubuntu-latest
     strategy:
@@ -31,6 +92,18 @@ jobs:
         run: |
           pip install dist/*.whl || pip install sdk/dist/*.whl
           python -c "import spantrail; print(spantrail.__version__)"
+
+  pricing-page:
+    # The pricing page's JavaScript is the only front-end logic that does
+    # anything, so it gets a real test.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test the pricing page's checkout flow
+        run: node www/pricing_dom_test.cjs www/pricing.html
 
   build-sdist:
     runs-on: ubuntu-latest
