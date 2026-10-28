@@ -30,8 +30,18 @@ jobs:
               "GitHub token":       r"gh[pousr]_[A-Za-z0-9]{20,}",
               "Postgres password":  r"postgresql://[^\s:@]+:([^@\s]{6,})@",
           }
-          # The install script writes a placeholder password; allow exactly it.
+          # The install script generates its secrets at install time, so the
+          # repo legitimately contains placeholders and shell variable
+          # references. Only a literal value is a leak.
           ALLOW = {"***"}
+
+          def is_placeholder(value):
+              if value in ALLOW:
+                  return True
+              # Shell / template variable references, e.g. ${DB_PASS}.
+              if any(c in value for c in "${}<>"):
+                  return True
+              return False
 
           proc = subprocess.Popen(
               ["git", "cat-file", "--batch-all-objects", "--batch"],
@@ -52,7 +62,7 @@ jobs:
               text = data.decode("utf-8", "replace")
               for label, pat in PATTERNS.items():
                   for m in re.findall(pat, text):
-                      if m in ALLOW:
+                      if is_placeholder(m):
                           continue
                       hits.setdefault(label, set()).add(m)
           proc.stdout.close(); proc.wait()
