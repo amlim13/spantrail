@@ -69,12 +69,36 @@ re-run it - the `lookup_key`s make that non-duplicating.
 | Billing portal configuration | Created, default |
 | Bots unaffected | 8 timers, 0 failed, 0 restarts |
 
+## The pages
+
+| URL | What it is |
+|---|---|
+| `/` | Landing page. Pricing cards link to `/pricing?plan=...`. |
+| `/pricing` | **The checkout page.** Three plans, each with a button that POSTs to `/api/v1/billing/checkout` and redirects to the Stripe-hosted page. |
+| `/dashboard` | Traces, spans, usage, **billing** tab, signup. |
+| `/api/docs` | OpenAPI reference. |
+
+The billing tab in the dashboard shows the current plan, the three plans side
+by side, a "Switch to X" button that opens Stripe Checkout, and a "Manage
+subscription" button that opens the Stripe billing portal.
+
+`www/pricing_dom_test.cjs` runs the pricing page's JavaScript against a
+stubbed DOM and a mocked fetch, and asserts that clicking "Upgrade to Pro"
+calls `/api/v1/billing/checkout` with `plan=pro` and then navigates to the
+returned Stripe URL. Run it with:
+
+```
+node www/pricing_dom_test.cjs www/pricing.html
+```
+
 ## Still to do
 
 1. **Revoke the Cloudflare token** - https://dash.cloudflare.com/profile/api-tokens
    -> `spantrail-dns` -> Revoke. The DNS records stay; only the token dies.
-2. **Buy a Pro plan through the real checkout UI** with `4242 4242 4242 4242`,
-   then confirm the tenant row flips to `plan=pro`.
+2. **Buy a Pro plan through the real checkout UI** - open
+   `https://spantrail.com/pricing?plan=pro`, paste the API key, click
+   "Upgrade to Pro", pay with `4242 4242 4242 4242`. Then confirm the tenant
+   row flips to `plan=pro`.
 3. **Test cancellation** - cancel in the Stripe test dashboard, confirm
    `status='cancelled'`.
 4. **Push the repo to GitHub** (needs a token) and publish to PyPI.

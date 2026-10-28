@@ -77,10 +77,10 @@
       <span class="logo"><span class="dot"></span>SpanTrail</span>
       <span class="sp"></span>
       <a class="m" href="#how">How</a>
-      <a class="m" href="#pricing">Pricing</a>
+      <a class="m" href="/pricing">Pricing</a>
       <a class="m" href="#docs">Docs</a>
       <a class="btn" href="/dashboard">Dashboard</a>
-      <a class="btn p" href="/dashboard#signup">Get an API key</a>
+      <a class="btn p" href="/pricing?plan=free">Get started free</a>
     </nav>
   </div>
 </header>
@@ -168,17 +168,20 @@ spantrail.init(api_key=<span class="s">"spantrail_sk_..."</span>, endpoint=<span
   <h2 id="pricing">Pricing</h2>
   <div class="grid g3">
     <div class="card"><h3>Free</h3><p style="font-size:26px;color:var(--fg);font-weight:700;margin:8px 0">$0</p>
-      <p>50k events / month. 30-day retention. Unlimited traces.</p></div>
+      <p>50k events / month. 30-day retention. Unlimited traces.</p>
+      <a class="btn" href="/pricing?plan=free" style="display:block;text-align:center;margin-top:14px">Get started</a></div>
     <div class="card" style="border-color:var(--acc)"><h3 style="color:var(--acc)">Pro</h3>
       <p style="font-size:26px;color:var(--fg);font-weight:700;margin:8px 0">$29</p>
-      <p>1M events / month. 30-day retention. Cost dashboards. Email support.</p></div>
+      <p>1M events / month. 30-day retention. Cost dashboards. Email support.</p>
+      <a class="btn p" href="/pricing?plan=pro" style="display:block;text-align:center;margin-top:14px">Upgrade to Pro</a></div>
     <div class="card"><h3>Team</h3><p style="font-size:26px;color:var(--fg);font-weight:700;margin:8px 0">$99</p>
-      <p>10M events / month. 90-day retention. Shared workspaces. Priority support.</p></div>
+      <p>10M events / month. 90-day retention. Shared workspaces. Priority support.</p>
+      <a class="btn" href="/pricing?plan=team" style="display:block;text-align:center;margin-top:14px">Upgrade to Team</a></div>
   </div>
 
   <footer>
     <span>SpanTrail - agent observability</span>
-    <span><a href="/api/docs">API reference</a> &middot; <a href="/dashboard">Dashboard</a> &middot; <a href="mailto:hello@spantrail.dev">hello@spantrail.com</a></span>
+    <span><a href="/api/docs">API reference</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/dashboard">Dashboard</a> &middot; <a href="mailto:hello@spantrail.dev">hello@spantrail.com</a></span>
   </footer>
 </div>
 </body>

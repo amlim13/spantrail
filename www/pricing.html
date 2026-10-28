@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing - SpanTrail</title>
+<link rel="stylesheet" href="/pricing.css">
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="/"><span class="dot"></span>SpanTrail</a>
+      <span class="sp"></span>
+      <a class="m" href="/#how">How</a>
+      <a class="m" href="/#features">Features</a>
+      <a class="m" href="/api/docs">API</a>
+      <a class="btn" href="/dashboard">Dashboard</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <h1>Pricing</h1>
+    <p class="sub">Start free. Upgrade when you need more events or longer retention.
+      Cancel any time from the billing portal.</p>
+  </section>
+
+  <div class="grid g3">
+    <div class="card" id="plan-free">
+      <h3>Free</h3>
+      <div class="price">$0<span>/mo</span></div>
+      <ul>
+        <li>50k events / month</li>
+        <li>30-day retention</li>
+        <li>Unlimited traces</li>
+        <li>Community support</li>
+      </ul>
+      <button class="btn wide" onclick="start('free')">Get started</button>
+    </div>
+
+    <div class="card feature" id="plan-pro">
+      <div class="badge">Most popular</div>
+      <h3>Pro</h3>
+      <div class="price">$29<span>/mo</span></div>
+      <ul>
+        <li>1M events / month</li>
+        <li>30-day retention</li>
+        <li>Cost dashboards</li>
+        <li>Email support</li>
+      </ul>
+      <button class="btn p wide" onclick="start('pro')">Upgrade to Pro</button>
+    </div>
+
+    <div class="card" id="plan-team">
+      <h3>Team</h3>
+      <div class="price">$99<span>/mo</span></div>
+      <ul>
+        <li>10M events / month</li>
+        <li>90-day retention</li>
+        <li>Shared workspaces</li>
+        <li>Priority support</li>
+      </ul>
+      <button class="btn wide" onclick="start('team')">Upgrade to Team</button>
+    </div>
+  </div>
+
+  <input type="hidden" id="plan" value="pro">
+
+  <div class="panel" id="keypanel">
+    <h3>Your API key</h3>
+    <p class="muted">Checkout needs a key so we know which account to upgrade.
+      Paste the key you signed up with.</p>
+    <div class="row">
+      <div><input id="key" type="password" placeholder="spantrail_sk_..." autocomplete="off"></div>
+      <div><button class="btn p" style="width:100%" onclick="start((document.getElementById('plan')||{}).value||'pro')">Continue to checkout</button></div>
+    </div>
+    <p class="hint">Your key stays in this browser. It is sent to our API only to create the checkout session.</p>
+    <p class="hint">No key yet? <a href="/dashboard#signup" id="signupLink">Create a free account</a> first -
+      the free plan is 50k events a month, no card required.</p>
+    <div id="err" class="err hide"></div>
+  </div>
+
+  <div class="faq">
+    <h3>Questions</h3>
+    <details><summary>What counts as an event?</summary>
+      <p>One span - a single step, tool call or model call in your agent. A trace with 20 spans is
+        20 events. Logs and traces are not counted.</p></details>
+    <details><summary>What happens if I exceed my plan?</summary>
+      <p>Ingest keeps working. The dashboard shows your usage against the limit so you can
+        upgrade before it matters. We do not hard-stop your agents mid-run.</p></details>
+    <details><summary>Can I change or cancel my plan?</summary>
+      <p>Yes. The billing portal, reachable from your dashboard, lets you move between plans
+        or cancel immediately. Cancel takes effect at the end of the paid period.</p></details>
+    <details><summary>Do you charge for failed requests?</summary>
+      <p>No. Only successful ingest calls are billed, by event count.</p></details>
+    <details><summary>Where is my data?</summary>
+      <p>In our Postgres instance on a single Hetzner box in your region. 30-day retention
+        on Free and Pro, 90 days on Team.</p></details>
+  </div>
+
+  <footer>
+    <span>SpanTrail - agent observability</span>
+    <span><a href="/">Home</a> &middot; <a href="/api/docs">API reference</a> &middot; <a href="/dashboard">Dashboard</a> &middot; <a href="mailto:hello@spantrail.com">hello@spantrail.com</a></span>
+  </footer>
+</div>
+
+<script>
+const PLANS = {free: 0, pro: 29, team: 99};
+
+function showErr(msg){
+  const e = document.getElementById('err');
+  e.textContent = msg;
+  e.classList.remove('hide');
+}
+
+function setKey(k){
+  document.getElementById('key').value = k;
+  try { localStorage.setItem('spantrail_key', k); } catch(e){}
+}
+
+async function start(plan){
+  const planField = document.getElementById('plan');
+  if(planField) planField.value = plan;
+  if(!plan || !PLANS.hasOwnProperty(plan)) plan = 'pro';
+  const key = (document.getElementById('key').value || '').trim()
+           || localStorage.getItem('spantrail_key') || '';
+  if(!key){
+    document.getElementById('keypanel').scrollIntoView({behavior:'smooth'});
+    document.getElementById('key').focus();
+    showErr('Paste your API key to continue.');
+    return;
+  }
+  document.getElementById('err').classList.add('hide');
+  const btn = document.querySelector('#plan-'+plan+' button');
+  const old = btn.textContent;
+  btn.textContent = 'Opening checkout...';
+  btn.disabled = true;
+  try{
+    const r = await fetch('/api/v1/billing/checkout', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-API-Key':key},
+      body: JSON.stringify({plan})
+    });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail || ('HTTP '+r.status));
+    window.location.href = j.url;
+  }catch(e){
+    btn.textContent = old;
+    btn.disabled = false;
+    showErr(e.message);
+  }
+}
+
+async function portal(){
+  const key = (document.getElementById('key').value || '').trim()
+           || localStorage.getItem('spantrail_key') || '';
+  if(!key){ showErr('Paste your API key first.'); return; }
+  try{
+    const r = await fetch('/api/v1/billing/portal', {
+      method:'POST', headers:{'X-API-Key':key}
+    });
+    const j = await r.json();
+    if(!r.ok) throw new Error(j.detail || ('HTTP '+r.status));
+    window.location.href = j.url;
+  }catch(e){ showErr(e.message); }
+}
+
+// Prefill the key from localStorage and remember the plan being upgraded.
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('spantrail_key');
+  if(saved) document.getElementById('key').value = saved;
+  const p = new URLSearchParams(location.search).get('plan');
+  const planField = document.getElementById('plan');
+  if(planField) planField.value = (p && PLANS[p] !== undefined) ? p : 'pro';
+  // Carry the plan into the signup flow so the user returns here.
+  const sl = document.getElementById('signupLink');
+  if(sl && planField) sl.href = '/dashboard#signup&plan=' + planField.value;
+  if(new URLSearchParams(location.search).get('manage') === '1') portal();
+});
+</script>
+</body>
+</html>

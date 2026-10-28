@@ -52,6 +52,15 @@
   .key{background:#0d0f13;border:1px solid var(--line);border-radius:8px;padding:12px 14px;
     font-family:ui-monospace,monospace;font-size:13px;word-break:break-all;margin-top:8px}
   .muted{color:var(--dim)}
+  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+  .plan{background:#0d0f13;border:1px solid var(--line);border-radius:10px;padding:16px}
+  .plan.cur{border-color:var(--acc)}
+  .plan .ph{font-size:15px;font-weight:600}
+  .plan .pp{font-size:24px;font-weight:700;margin:6px 0;letter-spacing:-.5px}
+  .plan .pp span{font-size:13px;color:var(--dim);font-weight:400}
+  .plan .pd{font-size:13px;color:var(--dim);line-height:1.5;margin-bottom:12px}
+  .plan .btn{width:100%}
+  @media(max-width:760px){.plans{grid-template-columns:1fr}}
   .bar{height:6px;border-radius:3px;background:#1c1f28;overflow:hidden;margin-top:8px}
   .bar i{display:block;height:100%;background:var(--acc)}
   @media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}
@@ -64,6 +73,7 @@
     <span class="tab on" data-t="traces">Traces</span>
     <span class="tab" data-t="spans">Spans</span>
     <span class="tab" data-t="usage">Usage</span>
+    <span class="tab" data-t="billing">Billing</span>
     <span class="sp"></span>
     <span class="tab" data-t="signup">API key</span>
   </nav>
@@ -106,6 +116,11 @@
       <div id="usage"></div>
     </div>
 
+    <div id="t-billing" class="panel hide">
+      <h3 style="margin-top:0">Billing</h3>
+      <div id="billing"></div>
+    </div>
+
     <div id="t-signup" class="panel hide">
       <h3 style="margin-top:0">Get an API key</h3>
       <p class="muted" style="font-size:14px;margin:0">Creates a tenant and shows the key once.</p>
@@ -128,7 +143,7 @@ let KEY = localStorage.getItem("spantrail_key") || "";
 const $ = id => document.getElementById(id);
 
 function show(t){
-  ["traces","spans","usage","signup"].forEach(x=>
+  ["traces","spans","usage","billing","signup"].forEach(x=>
     $("t-"+x).classList.toggle("hide", x!==t));
   document.querySelectorAll(".tab").forEach(el=>
     el.classList.toggle("on", el.dataset.t===t));
@@ -240,6 +255,56 @@ async function openTrace(id){
     $("traces").innerHTML = `<tr><td colspan="7"><b>${t.trace.name}</b> <span class="muted">${t.trace.id}</span>
       &nbsp;<button class="btn" onclick="refresh()">back</button></td></tr>` + rows;
   }catch(e){ alert(e.message); }
+}
+
+async function renderBilling(){
+  const box = $("billing");
+  box.innerHTML = '<p class="muted">Loading...</p>';
+  try{
+    const u = await api("/api/v1/usage");
+    const plans = [
+      {key:"free", name:"Free", price:"$0", events:"50k events / month", days:"30-day retention"},
+      {key:"pro",  name:"Pro",  price:"$29", events:"1M events / month", days:"30-day retention"},
+      {key:"team", name:"Team", price:"$99", events:"10M events / month", days:"90-day retention"},
+    ];
+    const cur = u.plan;
+    box.innerHTML = `
+      <p class="muted">You are on the <b style="color:var(--fg)">${cur}</b> plan.
+        ${fmt(u.events_used)} of ${fmt(u.events_limit)} events used this month.</p>
+      <div class="plans">` + plans.map(p => `
+        <div class="plan ${p.key===cur?'cur':''}">
+          <div class="ph">${p.name}${p.key===cur?' <span class="pill">current</span>':''}</div>
+          <div class="pp">${p.price}<span>/mo</span></div>
+          <div class="pd">${p.events}<br>${p.days}</div>
+          ${p.key===cur ? '' : `<button class="btn ${p.key==='pro'?'p':''}" onclick="upgrade('${p.key}')">Switch to ${p.name}</button>`}
+        </div>`).join('') + `</div>
+      <button class="btn" style="margin-top:18px" onclick="manageBilling()">Manage subscription (Stripe portal)</button>
+      <div id="billerr" class="err hide"></div>`;
+  }catch(e){
+    box.innerHTML = '<p class="muted">Could not load billing info: '+e.message+'</p>';
+  }
+}
+
+async function upgrade(plan){
+  try{
+    const r = await api("/api/v1/billing/checkout", {method:"POST", body: JSON.stringify({plan})});
+    window.location.href = r.url;
+  }catch(e){
+    const el = $("billerr");
+    el.textContent = e.message;
+    el.classList.remove("hide");
+  }
+}
+
+async function manageBilling(){
+  try{
+    const r = await api("/api/v1/billing/portal", {method:"POST"});
+    window.location.href = r.url;
+  }catch(e){
+    const el = $("billerr");
+    el.textContent = e.message;
+    el.classList.remove("hide");
+  }
 }
 
 async function signup(){

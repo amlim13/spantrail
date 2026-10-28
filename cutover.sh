@@ -44,6 +44,18 @@ spantrail.com, www.spantrail.com {
 		reverse_proxy 127.0.0.1:8080
 	}
 
+	handle /pricing {
+		root * /opt/spantrail/www
+		rewrite * /pricing.html
+		file_server
+	}
+
+	handle /pricing/* {
+		root * /opt/spantrail/www
+		rewrite * /pricing.html
+		file_server
+	}
+
 	handle /dashboard {
 		root * /opt/spantrail/www
 		rewrite * /dashboard.html

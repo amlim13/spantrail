@@ -75,6 +75,8 @@ install -o spantrail -g spantrail -m 0644 "$SRC/app/requirements.txt" "$APP/app/
 say "installing web assets"
 install -o spantrail -g spantrail -m 0644 "$SRC/www/index.html"    "$APP/www/index.html"
 install -o spantrail -g spantrail -m 0644 "$SRC/www/dashboard.html" "$APP/www/dashboard.html"
+install -o spantrail -g spantrail -m 0644 "$SRC/www/pricing.html"  "$APP/www/pricing.html"
+install -o spantrail -g spantrail -m 0644 "$SRC/www/pricing.css"   "$APP/www/pricing.css"
 
 say "installing caddy config"
 install -o spantrail -g spantrail -m 0644 "$SRC/caddy/Caddyfile"   "$APP/caddy/Caddyfile"
