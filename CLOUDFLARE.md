@@ -54,7 +54,7 @@ The plan is always shown first. The changes are:
 
 | Type | Name | Content | Proxy |
 |---|---|---|---|
-| A | `spantrail.com` | `178.105.143.122` | DNS only (grey) |
+| A | `spantrail.com` | `<your server IP>` | DNS only (grey) |
 | CNAME | `www.spantrail.com` | `spantrail.com` | DNS only (grey) |
 
 **Grey cloud is deliberate.** With the orange cloud on, Cloudflare terminates

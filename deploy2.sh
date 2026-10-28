@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Deploy the spantrail tree to the VPS (after migration) and verify.
 set -euo pipefail
-LOCAL="/mnt/c/Users/musal/AppData/Local/hermes/cache/scratch/obsv"
-SSH="ssh -i ~/.ssh/gspotohetzner -o BatchMode=yes -o ConnectTimeout=15 root@178.105.143.122"
+LOCAL="${LOCAL:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/gspotohetzner}"
+SSH_HOST="${SSH_HOST:-root@178.105.143.122}"
+SSH="ssh -i $SSH_KEY -o BatchMode=yes -o ConnectTimeout=15 $SSH_HOST"
 
 echo "--- staging tree on remote ---"
 $SSH "rm -rf /tmp/spantrail-src && mkdir -p /tmp/spantrail-src"

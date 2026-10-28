@@ -6,6 +6,8 @@ set -euo pipefail
 
 APP=/opt/spantrail
 SRC=/tmp/spantrail-src
+# The server this installer runs on. Override with VPS_IP=... if different.
+VPS_IP="${VPS_IP:-127.0.0.1}"
 LOG_PREFIX="[spantrail-install]"
 
 say(){ echo "$LOG_PREFIX $*"; }
@@ -138,7 +140,7 @@ if [ ! -f "$APP/app/.env" ]; then
   {
     echo "DATABASE_URL=postgresql://spantrail:${DB_PASS}@127.0.0.1:5432/spantrail"
     echo "ADMIN_TOKEN=${ADMIN_TOKEN}"
-    echo "PUBLIC_URL=https://178.105.143.122:8443"
+    echo "PUBLIC_URL=${PUBLIC_URL:-https://$VPS_IP:8443}"
     echo "RETENTION_DAYS=30"
     echo "STRIPE_SECRET_KEY="
     echo "STRIPE_WEBHOOK_SECRET="

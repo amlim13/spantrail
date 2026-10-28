@@ -1,8 +1,14 @@
 # SpanTrail - Operator Runbook
 
-Agent observability SaaS running on the Hetzner VPS `178.105.143.122`, sharing
-the host with the HYPE/ETH trading bots. This file is the only thing you need
-to operate it.
+Agent observability SaaS. This file is the only thing you need to operate it.
+
+Set your server once, then the commands below work:
+
+```bash
+export VPS_IP=<your server IP>
+export SSH_HOST=root@$VPS_IP
+export SSH_KEY=~/.ssh/<your key>
+```
 
 Renamed from "Obsv" to "SpanTrail" on 2026-10-27 after the domain
 `spantrail.com` was purchased. The `.com` was chosen over `tokentrail.*`
@@ -37,7 +43,7 @@ bash stripe_run.sh
 | `/opt/spantrail/venv/` | Python venv (FastAPI, uvicorn, psycopg2, stripe 16.x) |
 | `/opt/spantrail/pgdata/` | PostgreSQL 16 data dir (`0700`, owner `spantrail`) |
 | `/opt/spantrail/caddy/` | Caddyfile + `tls/` (self-signed until the ACME cutover) |
-| `/opt/spantrail/www/` | `index.html` (landing), `dashboard.html` |
+| `/opt/spantrail/www/` | `index.html` (landing), `dashboard.html`, `pricing.html`, `pricing.css` |
 | `/opt/spantrail/dist/` | Built SDK wheel (`spantrail-0.1.0-py3-none-any.whl`) |
 | `/tmp/spantrail-src` | Source tree uploaded by `deploy2.sh` |
 
@@ -78,16 +84,16 @@ sudo -u spantrail /opt/spantrail/venv/bin/python admin.py key-rotate --tenant <u
 | Port | Bound to | Service |
 |---|---|---|
 | 22 | 0.0.0.0 | sshd (pre-existing) |
-| 80 | 0.0.0.0 | Caddy (ACME http-01 + redirect) - after cutover |
-| 443 | 0.0.0.0 | Caddy (TLS) - after cutover |
-| 8443 | 0.0.0.0 | Caddy (self-signed placeholder, current) |
+| 80 | 0.0.0.0 | Caddy (ACME http-01 + redirect) |
+| 443 | 0.0.0.0 | Caddy (TLS) |
+| 8443 | 0.0.0.0 | Caddy (self-signed placeholder, optional) |
 | 8080 | 127.0.0.1 | uvicorn (never public) |
 | 5432 | 127.0.0.1 | Postgres (never public) |
 
-## Domain cutover (pending)
+## Domain cutover
 
 `spantrail.com` is registered at Cloudflare (NS `aitana`/`gerardo.ns.cloudflare.com`).
-**The A record has not been added yet.** Once it points at `178.105.143.122`:
+The A record must point at `$VPS_IP` before you run the cutover:
 
 1. Run `cutover.sh` from the local repo dir. It validates the config, swaps
    Caddy to ACME for `spantrail.com` + `www.spantrail.com`, and verifies the
@@ -124,11 +130,14 @@ sudo -u spantrail /usr/lib/postgresql/16/bin/pg_dump -h /opt/spantrail/pgdata -U
 | `422` on ingest | Payload shape mismatch - the API expects one object `{traces:[],spans:[],logs:[]}`, not a list. |
 | Bots seem slow | Check `systemctl show spantrail.slice -p MemoryCurrent` and `free -m`. |
 
-## Operating rules (from the trading skill)
+## Operating rules
 
-- Never overwrite, print or leak `/opt/spantrail/app/.env` or any bot `.env`.
-- Never touch `/opt/hype_bot`, `/opt/hypeTrend1h`, `/home/yusuf/`.
-- Exchange reads are fine; no order placement, no live/dry flips.
-- The `spantrail` user has no sudo and cannot read bot secrets - keep it that way.
+- Never print, paste or commit `/opt/spantrail/app/.env`. It holds the admin
+  token, the database password and the Stripe secret key.
+- The `spantrail` user has no sudo. It must not be able to read anything it
+  does not own.
 - SpanTrail must never make outbound calls to LLM providers. Buyer keys stay in
   the buyer's own code; SpanTrail only receives events.
+- If SpanTrail shares a host with other workloads, keep it in its own cgroup
+  slice (`spantrail.slice`) with `MemoryMax` and `CPUQuota` set, and verify
+  those workloads' restart counters after every deployment.

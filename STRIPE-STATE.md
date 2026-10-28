@@ -20,7 +20,7 @@ DNS (Cloudflare, DNS-only / grey cloud, TTL 300):
 
 | Type | Name | Content | Record id |
 |---|---|---|---|
-| A | `spantrail.com` | `178.105.143.122` | `5b6fa630652befbf5bd883c0e9b1531c` |
+| A | `spantrail.com` | `$VPS_IP` | `5b6fa630652befbf5bd883c0e9b1531c` |
 | CNAME | `www.spantrail.com` | `spantrail.com` | `0252c81fedcd44557ebb967a69e33bd4` |
 
 Ports in use: 22 (sshd), 80 (Caddy, ACME + redirect), 443 (Caddy, TLS),
@@ -30,12 +30,10 @@ loopback), 5432 (Postgres, loopback).
 ## Stripe
 
 ```
-account        : acct_1USITzEg75dpvMZq  (LIM Agentic AI, FR, EUR default)
+account        : <your Stripe account id>
 mode           : TEST
-products       : SpanTrail Pro  prod_VWLHNp3mB6Utbr  -> price_1UVIabEg75dpvMZqu85HCZDX  $29/mo
-                  SpanTrail Team prod_VWLH6w98scNbhI  -> price_1UVIacEg75dpvMZqTuaPpEox  $99/mo
-webhook        : we_1UVIacEg75dpvMZqhjPekswq  enabled, 4 events
-portal config  : bpc_1UVIk5Eg75dpvMZqc3UjeWm9  (default)
+products       : SpanTrail Pro  $29/mo, SpanTrail Team  $99/mo
+webhook        : https://spantrail.com/api/v1/billing/webhook  (enabled, 4 events)
 ```
 
 **Delivery proven.** Stripe POSTed to the public endpoint and the server

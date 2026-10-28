@@ -54,7 +54,7 @@ The second run reuses the products and prices from the first (matched by `lookup
 ## Verifying it worked
 
 ```bash
-ssh root@178.105.143.122 "grep -E '^STRIPE_' /opt/spantrail/app/.env | sed 's/=.*/=<set>/'"
+ssh $SSH_HOST "grep -E '^STRIPE_' /opt/spantrail/app/.env | sed 's/=.*/=<set>/'"
 ```
 
 All four should read `<set>`. Then, from the dashboard, get a tenant's API key and start a checkout:
@@ -74,7 +74,7 @@ You get back `{"url": "https://checkout.stripe.com/..."}`. Open it and use:
 On success the webhook fires and the tenant row updates:
 
 ```bash
-ssh root@178.105.143.122 "sudo -u spantrail /usr/lib/postgresql/16/bin/psql \
+ssh $SSH_HOST "sudo -u spantrail /usr/lib/postgresql/16/bin/psql \
   -h /opt/spantrail/pgdata -U spantrail -d spantrail -c \
   'SELECT name, plan, status, stripe_customer_id FROM tenants'"
 ```

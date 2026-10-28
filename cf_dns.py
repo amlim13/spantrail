@@ -23,7 +23,7 @@ import urllib.error
 
 API = "https://api.cloudflare.com/client/v4"
 ZONE_NAME = "spantrail.com"
-VPS_IP = "178.105.143.122"
+VPS_IP = os.environ.get("SPANTRAIL_VPS_IP", "178.105.143.122")
 TOKEN_FILE = os.path.expanduser("~/.config/spantrail/cf_token")
 
 # The records we want to exist. proxied=False (grey cloud) is required for

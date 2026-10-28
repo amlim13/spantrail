@@ -2,18 +2,23 @@
 # Cut over to the real domain: swap the Caddy config from the self-signed
 # placeholder to ACME (Let's Encrypt) for spantrail.com + www.spantrail.com.
 #
-# Run this ONLY after the A record for spantrail.com points at 178.105.143.122.
+# Run this ONLY after the A record for spantrail.com points at the server.
+# Override the target with SSH_HOST=root@your-server (and SSH_KEY=...).
+# The default below is the operator's production box.
 # It is idempotent: re-running it just re-checks the certificate.
 set -euo pipefail
-SSH="ssh -i ~/.ssh/gspotohetzner -o BatchMode=yes root@178.105.143.122"
-DOMAIN="spantrail.com"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/gspotohetzner}"
+SSH_HOST="${SSH_HOST:-root@178.105.143.122}"
+SSH="ssh -i $SSH_KEY -o BatchMode=yes $SSH_HOST"
+DOMAIN="${DOMAIN:-spantrail.com}"
+SERVER_IP="${SERVER_IP:-178.105.143.122}"
 
 echo "=== 0. preflight: does DNS point here yet? ==="
 # The VPS has neither dig nor nslookup; use getent (glibc resolver) instead.
 IPS=$($SSH "getent hosts $DOMAIN | awk '{print \$1}' | head -1" 2>/dev/null || true)
 echo "  $DOMAIN -> ${IPS:-<none>}"
-if ! echo "$IPS" | grep -q "178.105.143.122"; then
-  echo "  ABORT: $DOMAIN does not resolve to 178.105.143.122 yet."
+if ! echo "$IPS" | grep -q "$SERVER_IP"; then
+  echo "  ABORT: $DOMAIN does not resolve to $SERVER_IP yet."
   echo "  Add the A record in Cloudflare, then re-run this script."
   exit 1
 fi

@@ -10,8 +10,8 @@
 #   bash stripe_run.sh --skip-webhook   # products and prices only
 set -euo pipefail
 
-SSH_HOST="root@178.105.143.122"
-SSH_KEY="$HOME/.ssh/gspotohetzner"
+SSH_HOST="${SSH_HOST:-root@178.105.143.122}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/gspotohetzner}"
 REMOTE_SCRIPT="/opt/spantrail/app/stripe_setup.py"
 EXTRA=""
 [ "${1:-}" = "--skip-webhook" ] && EXTRA="--skip-webhook"

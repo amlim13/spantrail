@@ -13,7 +13,9 @@ for line in open("/opt/spantrail/app/.env"):
 from stripe import StripeClient
 
 c = StripeClient(os.environ["STRIPE_SECRET_KEY"])
-TID = "05b5dfb0-40f3-4f3c-86cf-692696861858"
+# The tenant to attribute the test subscription to. Override with
+# SPANTRAIL_TENANT_ID=... .
+TID = os.environ.get("SPANTRAIL_TENANT_ID", "05b5dfb0-40f3-4f3c-86cf-692696861858")
 
 
 def webhook_log(n=80):
@@ -24,7 +26,9 @@ def webhook_log(n=80):
 
 
 def external_only(lines):
-    return [l for l in lines if "127.0.0.1" not in l and "178.105.143.122" not in l]
+    """Webhook deliveries that did not come from localhost or our own IP."""
+    mine = os.environ.get("SPANTRAIL_VPS_IP", "178.105.143.122")
+    return [l for l in lines if "127.0.0.1" not in l and mine not in l]
 
 
 print("=== 1. customer + attached test card ===")
