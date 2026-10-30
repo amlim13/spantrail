@@ -28,6 +28,20 @@ CREATE TABLE IF NOT EXISTS traces (
 CREATE INDEX IF NOT EXISTS traces_tenant_created_idx ON traces (tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS traces_tenant_started_idx ON traces (tenant_id, started_at DESC);
 
+-- A share link grants read-only access to ONE trace without an API key.
+-- The token is random and stored hashed, so the database never holds a
+-- usable secret and a leaked link can be revoked.
+CREATE TABLE IF NOT EXISTS share_links (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id  UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    trace_id   UUID NOT NULL REFERENCES traces(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS share_links_trace_idx ON share_links (trace_id);
+CREATE INDEX IF NOT EXISTS share_links_tenant_idx ON share_links (tenant_id);
+
 CREATE TABLE IF NOT EXISTS spans (
     id            UUID PRIMARY KEY,
     tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,

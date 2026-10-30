@@ -11,15 +11,37 @@
 set -uo pipefail
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 1
 
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/gspotohetzner}"
 SSH_HOST="${SSH_HOST:-root@178.105.143.122}"
+
+# The deploy key lives in the WSL home, not the Windows one. Detect which
+# home has it and use that ssh binary.
+if [ -n "${SSH_KEY:-}" ]; then
+  SSH_BIN="${SSH_BIN:-ssh}"
+elif [ -f "$HOME/.ssh/gspotohetzner" ]; then
+  SSH_KEY="$HOME/.ssh/gspotohetzner"
+  SSH_BIN="ssh"
+elif command -v wsl.exe >/dev/null 2>&1 \
+     && wsl.exe -d Ubuntu -- bash -lc 'test -f ~/.ssh/gspotohetzner' 2>/dev/null; then
+  # The key lives in the WSL home. Use WSL's ssh, which can read it.
+  SSH_KEY="~/.ssh/gspotohetzner"
+  SSH_BIN="wsl.exe -d Ubuntu -- ssh"
+else
+  echo "Could not find the deploy key in $HOME/.ssh or in the WSL home." >&2
+  echo "Set SSH_KEY=/path/to/key (and SSH_BIN=ssh) and re-run." >&2
+  exit 1
+fi
+echo "  ssh key    : $SSH_KEY"
+echo "  ssh binary : $SSH_BIN"
 
 OUTDIR=$(cat "$HOME/.spantrail_outdir" 2>/dev/null || true)
 if [ -z "${OUTDIR:-}" ] || [ ! -d "sdk/$OUTDIR" ]; then
   echo "No build directory found. Building a fresh one..."
   OUTDIR="dist-publish-$(date +%s)"
-  ( cd sdk && python -m build --outdir "$OUTDIR" ) >/dev/null 2>&1 || {
-    echo "BUILD FAILED"; exit 1; }
+  if ! ( cd sdk && python -m build --outdir "$OUTDIR" ); then
+    echo
+    echo "BUILD FAILED - the output above is the reason."
+    exit 1
+  fi
 fi
 echo "Artifacts: sdk/$OUTDIR"
 ls -1 "sdk/$OUTDIR" | sed 's/^/  /'
@@ -82,14 +104,45 @@ fi
 echo
 echo "=== 4. Switch Stripe to LIVE mode ==="
 # The key goes to the server over stdin, never as an argument.
-printf '%s' "$STRIPE_KEY" | ssh -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
+# The key is written to a file rather than piped. Piping stdin through
+# wsl.exe is unreliable: wsl.exe can consume the stream before ssh sees it,
+# and the remote redirect can be mangled by the shell. A file is explicit
+# and testable.
+KEYFILE="$HOME/.spantrail_stripe_key"
+printf '%s' "$STRIPE_KEY" > "$KEYFILE"
+chmod 600 "$KEYFILE"
+
+# The path the server-side command reads from, expressed inside WSL when
+# the key and ssh live there.
+# Deliver the key with scp-like semantics: write it to the server's /tmp
+# using a redirect inside the remote shell. The redirect is done by the
+# REMOTE shell, and the file is fed on stdin - but the redirect target is
+# quoted so no local shell can mangle it.
+$SSH_BIN -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
+  'umask 077; cat > /tmp/.stlivekey' < "$KEYFILE" \
+  && echo "  key delivered to the server" \
+  || { echo "  could not deliver the key to the server" >&2; rm -f "$KEYFILE"; exit 1; }
+rm -f "$KEYFILE"
+
+# Confirm the server received the exact bytes before using the key.
+GOT=$($SSH_BIN -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
+  '/opt/spantrail/venv/bin/python -c "import sys; sys.stdout.write(str(len(open(\"/tmp/.stlivekey\").read().strip())))"' \
+  2>/dev/null | tr -d '\r')
+WANT=$(printf '%s' "$STRIPE_KEY" | wc -c | tr -d ' ')
+if [ "$GOT" != "$WANT" ]; then
+  echo "  the server received $GOT bytes, expected $WANT - aborting." >&2
+  $SSH_BIN -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" 'rm -f /tmp/.stlivekey'
+  exit 1
+fi
+echo "  key verified on the server ($GOT bytes)"
+
+$SSH_BIN -i "$SSH_KEY" -o BatchMode=yes "$SSH_HOST" \
   'set -u
    ENV=/opt/spantrail/app/.env
    BAK=/tmp/.env.bak.$$
    cp -p "$ENV" "$BAK"
    echo "  backed up the current .env"
 
-   cat > /tmp/.stlivekey && chmod 600 /tmp/.stlivekey
    /opt/spantrail/venv/bin/python - <<'"'"'PYEOF'"'"'
 import getpass, sys, runpy
 with open("/tmp/.stlivekey") as f:

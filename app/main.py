@@ -2,6 +2,8 @@
 import os
 import json
 import uuid
+import secrets
+import hashlib
 import datetime as dt
 from typing import Any, Dict, List, Optional
 
@@ -268,6 +270,258 @@ def get_trace(trace_id: str, tenant=Depends(require_tenant)):
         )
         logs = [dict(r) for r in cur.fetchall()]
     return {"trace": dict(t), "spans": spans, "logs": logs}
+
+
+# ---------------------------------------------------------------- share links
+# A share link is an unguessable token that grants READ access to ONE trace
+# without an API key. This is what makes a failed run pasteable into Slack:
+# "here is what the agent did" -> a link anyone in the team can open.
+#
+# The token is random and stored hashed, so a leaked link is revocable and
+# the database never holds a usable secret. The trace itself is never
+# mutated by sharing it.
+
+@app.get("/api/v1/traces/{trace_id}/share", status_code=201)
+def create_share_link(trace_id: str, tenant=Depends(require_tenant)):
+    """Mint a read-only, no-login link for one trace.
+
+    Returns the URL to share. The same link is returned if one already
+    exists, so calling this twice does not litter the database.
+    """
+    with db.cursor() as cur:
+        # Confirm the trace belongs to this tenant before sharing anything.
+        cur.execute(
+            "SELECT id FROM traces WHERE id = %s AND tenant_id = %s",
+            (trace_id, tenant["id"]),
+        )
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="trace not found")
+
+        # Only the hash is stored, so an existing link cannot be recovered -
+        # minting a fresh one is the only option. Old links stay valid until
+        # revoked, which is why the dashboard lists them.
+        raw = secrets.token_urlsafe(24)
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        cur.execute(
+            """INSERT INTO share_links (id, tenant_id, trace_id, token_hash, created_at)
+               VALUES (gen_random_uuid(), %s, %s, %s, now())""",
+            (tenant["id"], trace_id, token_hash),
+        )
+    base = (os.environ.get("PUBLIC_URL") or "https://spantrail.com").rstrip("/")
+    return {
+        "url": f"{base}/t/{raw}",
+        "trace_id": trace_id,
+        "note": "Anyone with this link can read this trace. Revoke it from the dashboard.",
+    }
+
+
+@app.delete("/api/v1/share/{token}")
+def revoke_share_link(token: str, tenant=Depends(require_tenant)):
+    """Revoke a share link so the URL stops working."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with db.cursor() as cur:
+        cur.execute(
+            """UPDATE share_links SET revoked_at = now()
+               WHERE token_hash = %s AND tenant_id = %s AND revoked_at IS NULL""",
+            (token_hash, tenant["id"]),
+        )
+        n = cur.rowcount
+    if not n:
+        raise HTTPException(status_code=404, detail="share link not found")
+    return {"revoked": True}
+
+
+@app.get("/api/v1/public/traces/{token}")
+def public_trace(token: str):
+    """Read a shared trace with NO api key. This is the share link target.
+
+    Only spans of the trace are exposed, and the tenant's identity is
+    deliberately not included beyond the trace name.
+    """
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with db.cursor() as cur:
+        cur.execute(
+            """SELECT s.trace_id, s.tenant_id, s.created_at, s.revoked_at
+               FROM share_links s WHERE s.token_hash = %s""",
+            (token_hash,),
+        )
+        link = cur.fetchone()
+        if not link or link["revoked_at"] is not None:
+            raise HTTPException(status_code=404, detail="this link is not valid")
+
+        cur.execute(
+            "SELECT id, name, session_id, started_at, ended_at, meta FROM traces WHERE id = %s",
+            (link["trace_id"],),
+        )
+        t = cur.fetchone()
+        if not t:
+            raise HTTPException(status_code=404, detail="trace not found")
+
+        cur.execute(
+            """SELECT id, parent_id, name, kind, started_at, ended_at, duration_ms,
+                      input, output, error, model, tokens_input, tokens_output, cost_usd
+               FROM spans WHERE trace_id = %s
+               ORDER BY started_at ASC, duration_ms DESC NULLS LAST""",
+            (link["trace_id"],),
+        )
+        spans = [dict(r) for r in cur.fetchall()]
+        cur.execute(
+            """SELECT id, span_id, level, message, created_at FROM logs
+               WHERE trace_id = %s ORDER BY created_at ASC LIMIT 200""",
+            (link["trace_id"],),
+        )
+        logs = [dict(r) for r in cur.fetchall()]
+
+    return {
+        "trace": dict(t),
+        "spans": spans,
+        "logs": logs,
+        "cost_usd": round(sum((s.get("cost_usd") or 0) for s in spans), 6),
+        "llm_cost_usd": round(sum((s.get("cost_usd") or 0) for s in spans if s.get("kind") == "llm"), 6),
+    }
+
+
+# ---------------------------------------------------------------- spend
+# The core promise: one number per run. Cost is metered on LLM spans only;
+# tool and other spans are traced but never billed. This is the class-aware
+# pricing that Datadog and Langfuse's own cost engine use, and it is the
+# reason an agent that checks state and verifies before acting is not
+# punished for doing so.
+
+@app.get("/api/v1/spend")
+def spend(
+    days: int = Query(30, ge=1, le=365),
+    group_by: str = Query("day", pattern="^(day|model|trace|name)$"),
+    limit: int = Query(100, le=1000),
+    tenant=Depends(require_tenant),
+):
+    """Where the money went, metered on LLM spans only."""
+    with db.cursor() as cur:
+        if group_by == "day":
+            cur.execute(
+                """SELECT to_char(date_trunc('day', s.created_at), 'YYYY-MM-DD') AS bucket,
+                          COUNT(*) FILTER (WHERE s.kind = 'llm') AS llm_spans,
+                          COUNT(*) AS total_spans,
+                          COALESCE(SUM(s.tokens_input),0) AS tokens_in,
+                          COALESCE(SUM(s.tokens_output),0) AS tokens_out,
+                          COALESCE(SUM(s.cost_usd),0) AS cost_usd
+                   FROM spans s
+                   WHERE s.tenant_id = %s AND s.created_at > now() - make_interval(days => %s)
+                   GROUP BY 1 ORDER BY 1 DESC LIMIT %s""",
+                (tenant["id"], days, limit),
+            )
+        elif group_by == "model":
+            cur.execute(
+                """SELECT COALESCE(s.model, '(unknown)') AS bucket,
+                          COUNT(*) FILTER (WHERE s.kind = 'llm') AS llm_spans,
+                          COUNT(*) AS total_spans,
+                          COALESCE(SUM(s.tokens_input),0) AS tokens_in,
+                          COALESCE(SUM(s.tokens_output),0) AS tokens_out,
+                          COALESCE(SUM(s.cost_usd),0) AS cost_usd
+                   FROM spans s
+                   WHERE s.tenant_id = %s AND s.created_at > now() - make_interval(days => %s)
+                   GROUP BY 1 ORDER BY cost_usd DESC LIMIT %s""",
+                (tenant["id"], days, limit),
+            )
+        elif group_by == "name":
+            cur.execute(
+                """SELECT s.name AS bucket,
+                          COUNT(*) FILTER (WHERE s.kind = 'llm') AS llm_spans,
+                          COUNT(*) AS total_spans,
+                          COALESCE(SUM(s.tokens_input),0) AS tokens_in,
+                          COALESCE(SUM(s.tokens_output),0) AS tokens_out,
+                          COALESCE(SUM(s.cost_usd),0) AS cost_usd
+                   FROM spans s
+                   WHERE s.tenant_id = %s AND s.created_at > now() - make_interval(days => %s)
+                   GROUP BY 1 ORDER BY cost_usd DESC LIMIT %s""",
+                (tenant["id"], days, limit),
+            )
+        else:  # trace
+            cur.execute(
+                """SELECT t.id::text AS bucket, t.name,
+                          COUNT(*) FILTER (WHERE s.kind = 'llm') AS llm_spans,
+                          COUNT(s.id) AS total_spans,
+                          COALESCE(SUM(s.tokens_input),0) AS tokens_in,
+                          COALESCE(SUM(s.tokens_output),0) AS tokens_out,
+                          COALESCE(SUM(s.cost_usd),0) AS cost_usd
+                   FROM spans s JOIN traces t ON t.id = s.trace_id
+                   WHERE s.tenant_id = %s AND s.created_at > now() - make_interval(days => %s)
+                   GROUP BY t.id, t.name ORDER BY cost_usd DESC LIMIT %s""",
+                (tenant["id"], days, limit),
+            )
+        rows = [dict(r) for r in cur.fetchall()]
+
+        # The headline: what a flat per-span meter would have charged, versus
+        # what we charge. This is the number that makes the pricing model
+        # legible to a buyer.
+        cur.execute(
+            """SELECT COALESCE(SUM(cost_usd),0) AS llm_cost,
+                      COALESCE(SUM(cost_usd) FILTER (WHERE kind <> 'llm'),0) AS tool_cost,
+                      COUNT(*) FILTER (WHERE kind = 'llm') AS llm_spans,
+                      COUNT(*) AS total_spans
+               FROM spans
+               WHERE tenant_id = %s AND created_at > now() - make_interval(days => %s)""",
+            (tenant["id"], days),
+        )
+        t = cur.fetchone()
+
+    total_spans = int(t["total_spans"] or 0)
+    llm_spans = int(t["llm_spans"] or 0)
+    tool_spans = total_spans - llm_spans
+    # Langfuse Core's published overage rate is $8 per 100k units.
+    flat_meter_cost = (total_spans / 100000.0) * 8.0
+
+    return {
+        "days": days,
+        "group_by": group_by,
+        "buckets": rows,
+        "summary": {
+            "cost_usd": round(float(t["llm_cost"] or 0), 6),
+            "tool_span_cost_usd": round(float(t["tool_cost"] or 0), 6),
+            "llm_spans": llm_spans,
+            "tool_spans": tool_spans,
+            "total_spans": total_spans,
+            "flat_meter_cost_usd": round(flat_meter_cost, 2),
+            "tool_spans_free": tool_spans,
+        },
+    }
+
+
+@app.get("/api/v1/summary")
+def summary(tenant=Depends(require_tenant)):
+    """The one-screen answer: what did my agents cost, and how did they do."""
+    with db.cursor() as cur:
+        cur.execute(
+            """SELECT COUNT(*) AS traces,
+                      COUNT(*) FILTER (WHERE s.error IS NOT NULL) AS errors,
+                      COALESCE(SUM(s.cost_usd),0) AS cost_usd,
+                      COALESCE(SUM(s.tokens_input + s.tokens_output),0) AS tokens,
+                      COALESCE(SUM(s.cost_usd) FILTER (WHERE s.kind = 'llm'),0) AS llm_cost,
+                      COALESCE(AVG(s.duration_ms),0) AS avg_ms
+               FROM spans s
+               WHERE s.tenant_id = %s AND s.created_at > now() - interval '30 days'""",
+            (tenant["id"],),
+        )
+        s = cur.fetchone()
+        cur.execute(
+            """SELECT COUNT(*) FROM traces
+               WHERE tenant_id = %s AND created_at > now() - interval '30 days'""",
+            (tenant["id"],),
+        )
+        n_traces = cur.fetchone()[0]
+
+    total = int(s["traces"] or 0)
+    return {
+        "period_days": 30,
+        "traces": int(n_traces or 0),
+        "spans": total,
+        "errors": int(s["errors"] or 0),
+        "error_rate": round((s["errors"] or 0) / total, 4) if total else 0.0,
+        "cost_usd": round(float(s["cost_usd"] or 0), 6),
+        "tokens": int(s["tokens"] or 0),
+        "avg_duration_ms": round(float(s["avg_ms"] or 0), 1),
+        "per_trace_cost_usd": round(float(s["cost_usd"] or 0) / n_traces, 6) if n_traces else 0.0,
+    }
 
 
 @app.get("/api/v1/spans")
