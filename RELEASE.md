@@ -4,14 +4,34 @@ Both steps need a secret that only the operator can supply. `publish_all.sh`
 reads both in a hidden terminal field - neither enters the conversation, a
 command-line argument, a process list, or a shell history.
 
+**In PowerShell or cmd** (this is the one to use - PowerShell 5.1 does not
+accept `&&`):
+
+```
+release.bat
+```
+
+**In Git Bash or WSL:**
+
 ```bash
 bash publish_all.sh
 ```
 
-It publishes to PyPI **first** and verifies the upload landed on pypi.org.
-Only then does it touch Stripe. If the PyPI upload fails, Stripe is not
-touched at all. The Stripe step backs up `/opt/spantrail/app/.env` and
-restores it if the cutover does not complete cleanly.
+Both do the same thing. The script publishes to PyPI **first** and verifies
+the upload landed on pypi.org. Only then does it touch Stripe. If the PyPI
+upload fails, Stripe is not touched at all. The Stripe step backs up
+`/opt/spantrail/app/.env` and restores it if the cutover does not complete
+cleanly, and the Stripe key is byte-verified on the server before use.
+
+### If the script cannot find the deploy key
+
+The key lives in the WSL home (`~/.ssh/gspotohetzner`), not the Windows one.
+The script detects which home has it and uses WSL's `ssh` when that is where
+it lives. To override:
+
+```bash
+SSH_KEY=/path/to/key SSH_BIN=ssh bash publish_all.sh
+```
 
 ## Step 1 - the PyPI token
 
@@ -30,6 +50,7 @@ The script refuses a `sk_test_` key.
 ## Before running it
 
 | Check | Why |
+|---|---|
 |---|---|
 | The PyPI name is still free | `curl -s -o /dev/null -w '%{http_code}' https://pypi.org/pypi/spantrail/json` -> 404 means free |
 | `twine check dist/*` passes | A metadata error blocks the upload |
